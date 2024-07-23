@@ -1,0 +1,29 @@
+[
+    {
+    "id": 0,
+    "pre_query_template": "<s> [INST] ",
+    "instruction": "A triangle has sides of lengths 10 cm, 8 cm, and 12 cm. Is the triangle a right-angled triangle?",
+    "response": "To determine if a triangle is a right-angled triangle, we can use the Pythagorean theorem, which states that in a right-angled triangle, the square of the length of the hypotenuse (the side opposite the right angle) is equal to the sum of the squares of the lengths of the other two sides.\n\nLet's check if the given triangle is a right-angled triangle:\n\n1. Hypotenuse (c) is 12 cm.\n2. One leg (a) is 10 cm, and the other leg (b) is 8 cm.\n3. Now, let's square each side:\n   - a\u00b2 = 10\u00b2 = 100\n   - b\u00b2 = 8\u00b2 = 64\n   - c\u00b2 = 12\u00b2 = 144\n4. Check if c\u00b2 equals a\u00b2 + b\u00b2:\n   144 = 100 + 64\n   144 \u2260 164 (Not equal)\n\nSince the square of the hypotenuse does not equal the sum of the squares of the other two sides, the given triangle is not a right-angled triangle.",
+    "created": 1720724570,
+    "gen_input_configs": {
+      "temperature": 1.25,
+      "top_p": 0.99,
+      "input_generator": "mistralai/Mistral-7B-Instruct-v0.3",
+      "seed": null
+    },
+    "gen_response_configs": {
+      "prompt": "[INST] A triangle has sides of lengths 10 cm, 8 cm, and 12 cm. Is the triangle a right-angled triangle? [/INST]",
+      "temperature": 0.0,
+      "top_p": 1.0,
+      "repetition_penalty": 1.0,
+      "max_tokens": 4096,
+      "stop_tokens": [
+        "<s>",
+        "</s>",
+        "[INST]",
+        "[/INST]"
+      ],
+      "output_generator": "mistralai/Mistral-7B-Instruct-v0.3"
+    }
+  }
+]
