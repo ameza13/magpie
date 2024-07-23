@@ -74,10 +74,22 @@ if not args.job_name:
         os.makedirs(args.output_folder)
     output_dir = f"{args.output_folder}/{output_filename}"
 else:
-    output_dir = f"{args.output_folder}/{args.job_name}/{output_filename}"
+    # output_dir = f"{args.output_folder}/{args.job_name}/{output_filename}"
+    output_dir = f"{args.output_folder}/{output_filename}"
 
 # Set the device
 os.environ["CUDA_VISIBLE_DEVICES"] = args.device
+print(f"CUDA_VISIBLE_DEVICES: {os.environ['CUDA_VISIBLE_DEVICES']}")
+
+# TEST
+# print("= llm params =")
+# print(f"model: {args.model_path}")
+# print(f"dtype: {args.dtype}")
+# print(f"gpu_memory_utilization: {args.gpu_memory_utilization}")
+# print(f"max_model_len: {args.max_model_len}")
+# print(f"swap_space: {args.swap_space}")
+# print(f"tensor_parallel_size: {args.tensor_parallel_size}")
+# print(f"seed: {args.seed if args.seed is not None else args.timestamp}")
 
 # Create vllm instance  
 llm = LLM(model=args.model_path, 
@@ -90,7 +102,8 @@ llm = LLM(model=args.model_path,
         seed=args.seed if args.seed is not None else args.timestamp)
 
 # Obtain config from configs/model_configs.json
-with open("../configs/model_configs.json", "r", encoding="utf-8") as f:
+CONFIG_FILE_PATH = os.path.join(os.environ['HOME'],"/workspace/magpie/configs/model_configs.json")
+with open(CONFIG_FILE_PATH, "r", encoding="utf-8") as f:
     model_configs = json.load(f)
     model_config = model_configs[args.model_path]
     if args.control_tasks:
@@ -107,9 +120,19 @@ with open("../configs/model_configs.json", "r", encoding="utf-8") as f:
 if args.early_stopping:
     stop_tokens.append("\n")
 
+# TEST
+# print("= sampling params =")
+# print(f"n: {args.n}")
+# print(f"temperature: {args.temperature}")
+# print(f"top_p: {args.top_p}")
+# print(f"max_tokens: {args.max_tokens}")
+# print(f"skip_special_tokens: {args.skip_special_tokens}")
+# print(f"stop: {stop_tokens}")
+# print(f"stop_token_ids: {stop_token_ids}")
+
 # Define sampling parameters
 sampling_params = SamplingParams(
-    n=args.n,
+    n=args.n,# 200
     temperature=args.temperature,
     top_p=args.top_p,
     max_tokens=args.max_tokens,
@@ -122,9 +145,9 @@ sampling_params = SamplingParams(
 # Generate outputs
 ################
 results = []
-for rounds in tqdm(range(args.repeat)):
+for rounds in tqdm(range(args.repeat)): # 1000/200 = 5
     # Generate outputs
-    output = llm.generate(pre_query_template, sampling_params)
+    output = llm.generate(pre_query_template, sampling_params) # It generates 200 outputs for the same pre-query
     if args.shuffle:
         random.shuffle(output[0].outputs)
 
@@ -157,3 +180,4 @@ with open(output_dir, "w") as f:
     json.dump(results, f, indent=2)
 
 print(f"Instruction generated from {args.model_path}. Total prompts: {len(results)}")
+print(f"Temporal dataset saved at: {output_dir}.")

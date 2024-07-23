@@ -57,7 +57,8 @@ CHECKPOINT_EVERY = args.checkpoint_every
 SAVED_FILE = f"{INPUT_FILE_NAME[:INPUT_FILE_NAME.rfind('.')]}_res.json"
 
 # Obtain config from configs/model_configs.json
-with open("../configs/model_configs.json", "r") as f:
+CONFIG_FILE_PATH = os.path.join(os.environ['HOME'],"/workspace/magpie/configs/model_configs.json")
+with open(CONFIG_FILE_PATH, "r", encoding="utf-8") as f:
     model_configs = json.load(f)
     model_config = model_configs[args.model_path]
     stop_tokens = model_config["stop_tokens"]
@@ -134,8 +135,20 @@ def process_batch(batch, llm, params, tokenizer=None):
         else:
             chat = [{"role": "user", "content": instruction}]
             template = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
+            # template = llm.llm_engine.tokenizer.tokenizer.apply_chat_template(chat, 
+            #                                                                   tokenize=False, 
+            #                                                                   add_generation_prompt=True)
         prompts.append(template)
+    # print("= TEST =") # TEST
+    # print(f"Total prompts in batch: {len(prompts)}") # TEST
+    # print(f"First sample type: {type(prompts[0])}")
+    # print(f"First sample content: {prompts[0]}") # TEST
+
     outputs = llm.generate(prompts, params)
+
+    # print(len(outputs)) # TEST
+    # print(outputs[0]) # TEST
+
     for i, item in enumerate(batch):
         item['response'] = outputs[i].outputs[0].text.strip()
         item['gen_response_configs'] = {
@@ -174,6 +187,7 @@ def generate_and_update(dataset, llm=None, params=None, api=False, tokenizer=Non
         if api:
             batch = process_batch_with_api(batch)
         else:
+            # print(f"Batch: {i}") # TEST
             batch = process_batch(batch, llm, params, tokenizer)
         
         dataset[start_idx:end_idx] = batch
@@ -196,30 +210,59 @@ def main():
     else:
         # Set the device
         os.environ["CUDA_VISIBLE_DEVICES"] = args.device
+        print(f"CUDA_VISIBLE_DEVICES: {os.environ['CUDA_VISIBLE_DEVICES']}")
         print("Start Local vllm engine...")
+
+        # TEST
+        # print("= llm params =")
+        # print(f"model: {MODEL_NAME}")
+        # print(f"dtype: {args.dtype}")
+        # print(f"gpu_memory_utilization: {args.gpu_memory_utilization}")
+        # print(f"max_model_len: {args.max_model_len}")
+        # # print(f"swap_space: {args.swap_space}")
+        # print(f"tensor_parallel_size: {args.tensor_parallel_size}")
+        # # print(f"seed: {args.seed if args.seed is not None else args.timestamp}")
+
         llm =  LLM(model=MODEL_NAME, 
             dtype=args.dtype,
             trust_remote_code=True,
+            gpu_memory_utilization = args.gpu_memory_utilization,
             max_model_len = args.max_model_len, # limited by kv-cache 
             tensor_parallel_size = args.tensor_parallel_size,
-            gpu_memory_utilization = args.gpu_memory_utilization)
-    
+            )
+
+        # TEST
+        # print("= sampling params =")
+        # # print(f"n: {args.n}")   
+        # print(f"temperature: {args.temperature}")
+        # print(f"top_p: {args.top_p}")
+        # print(f"max_tokens: {args.max_tokens}")       
+        # # print(f"skip_special_tokens: {args.skip_special_tokens}")
+        # # print(f"stop: {stop_tokens}")
+        # print(f"repetition_penalty: {args.repetition_penalty}")
+        # print(f"stop_token_ids: {stop_token_ids}")     
+
         params = SamplingParams(
-            max_tokens=args.max_tokens,
             temperature=args.temperature,
             top_p=args.top_p,
+            max_tokens=args.max_tokens,
             repetition_penalty=args.repetition_penalty,
             stop_token_ids=stop_token_ids,
             )
 
     updated_dataset = generate_and_update(dataset, llm, params, api=args.api, tokenizer=AutoTokenizer.from_pretrained(MODEL_NAME))
 
+    # TEST
+    # batch = dataset[:100] # Take first 100 samples only
+    # updated_dataset = process_batch(batch=batch, llm=llm, params=params)
+
+
     # Save final dataset
     save_dataset(updated_dataset, SAVED_FILE)
 
     # Optionally remove the checkpoint file after completion
     os.remove(CHECKPOINT_FILE)
-    print("Final dataset saved. Checkpoint removed.")
+    print(f"Final dataset saved at: {SAVED_FILE}.\nCheckpoint removed.")
 
 # Run the main function
 if __name__ == "__main__":

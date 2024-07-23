@@ -64,7 +64,8 @@ CHECKPOINT_EVERY = args.checkpoint_every
 SAVED_FILE = f"{INPUT_FILE_NAME[:INPUT_FILE_NAME.rfind('.')]}_mt.json"
 
 # Obtain config from configs/model_configs.json
-with open("../configs/model_configs.json", "r") as f:
+CONFIG_FILE_PATH = os.path.join(os.environ['HOME'],"/workspace/magpie/configs/model_configs.json")
+with open(CONFIG_FILE_PATH, "r", encoding="utf-8") as f:
     model_configs = json.load(f)
     model_config = model_configs[args.model_path]
     stop_tokens = model_config["stop_tokens"]
@@ -98,9 +99,9 @@ def process_batch(batch, llm, instruction_params, response_params, tokenizer=Non
                 template = conv.get_prompt() + mt_append_template
             else:
                 chat = []
-                chat.append({"role": "system", "content": mt_system_prompt})
+                # chat.append({"role": "system", "content": mt_system_prompt})
                 if turn == 2:
-                    chat.append({"role": "user", "content": item[f'instruction']})
+                    chat.append({"role": "user", "content": mt_system_prompt+"\n"+item[f'instruction']})
                     chat.append({"role": "assistant", "content": item[f'response']})
                 else:
                     chat.append({"role": "user", "content": item[f'instruction']})
@@ -110,10 +111,12 @@ def process_batch(batch, llm, instruction_params, response_params, tokenizer=Non
                         chat.append({"role": "assistant", "content": item[f'response_{i}']})
                 template = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=False) + mt_append_template
             prompts.append(template)
+
         outputs = llm.generate(prompts, instruction_params)
         for i, item in enumerate(batch):
             item[f'instruction_{turn}'] = outputs[i].outputs[0].text.strip()
 
+        # print(f"OUTPUT INST: {outputs[0].outputs[0].text.strip()}") # TEST 
         # Generate Responses
         print(f"Generating responses for turn {turn}...")
         prompts = []
@@ -146,9 +149,12 @@ def process_batch(batch, llm, instruction_params, response_params, tokenizer=Non
                 chat.append({"role": "user", "content": item[f'instruction_{turn}']})
                 template = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
             prompts.append(template)
+
         outputs = llm.generate(prompts, response_params)
         for i, item in enumerate(batch):
             item[f'response_{turn}'] = outputs[i].outputs[0].text.strip()
+
+        # print(f"OUTPUT RESP: {outputs[0].outputs[0].text.strip()}") # TEST 
 
     return batch
 
@@ -171,6 +177,7 @@ def generate_and_update(dataset, llm=None, instruction_params=None, response_par
         print(f"Total number of batches: {num_batches}")
 
     for i in tqdm(range(num_batches)):
+        # print(f"Batch: {i}") # TEST
         start_idx = i * BATCH_SIZE + last_checkpoint_idx
         end_idx = min((i + 1) * BATCH_SIZE + last_checkpoint_idx, len(dataset))
         batch = dataset[start_idx:end_idx]
