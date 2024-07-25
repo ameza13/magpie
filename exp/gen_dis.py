@@ -1,3 +1,4 @@
+import os
 from datasets import load_dataset
 from sentence_transformers import SentenceTransformer
 import torch
@@ -16,6 +17,7 @@ def get_args():
     parser = argparse.ArgumentParser(description="Similarity Calculation Manager.")
     parser.add_argument("--sentence_model", type=str, default="sentence-transformers/all-mpnet-base-v2")
     parser.add_argument("--input_file", type=str, default=None, help="Input dataset file name")
+    parser.add_argument("--output_dir", type=str, default="", help="Directory path to save output files")
     parser.add_argument("--encoding_batch_size", type=int, default=65536, help="Batch size for encoding the sentences.")
     parser.add_argument("--distance_distance_threshold", type=float, default=0.05, help="distance_threshold for the similarity search.")
     parser.add_argument("--search_space_size", type=int, default=500, help="Number of examples to search for similarity.")
@@ -31,8 +33,9 @@ args = get_args()
 
 sentence_model = args.sentence_model
 dataset_path = args.input_file
+output_dir = args.output_dir
 dataset_name = dataset_path[dataset_path.rfind('/')+1:dataset_path.rfind('.')]
-output_file = f"../data/{dataset_name}_distance.jsonl"
+output_file = f"{dataset_name[:dataset_name.rfind('.')]}_distance.jsonl"
 
 ################
 # Step 1 - Load the Dataset and Build the Faiss Index
@@ -40,7 +43,7 @@ output_file = f"../data/{dataset_name}_distance.jsonl"
 # Load the dataset
 dataset = load_dataset("json", data_files=dataset_path)
 print(dataset)
-inputs = dataset["train"]["instruction"]
+inputs = dataset["train"]["input"]
 print(f"The second instruction in the dataset is: {inputs[1]}")
 
 model = SentenceTransformer(sentence_model)
@@ -74,7 +77,7 @@ if args.save_faiss_index:
     print("Saving the Faiss index...")
     index = dataset["train"].get_index("embeddings")
     faiss_index = index.faiss_index
-    index_file = f"../data/{dataset_name}.faiss"
+    index_file=os.path.join(output_dir,f"{dataset_name}.faiss")
     faiss.write_index(faiss_index, index_file)
 
 ################
@@ -89,7 +92,8 @@ print(f"Number of batches: {n_batches}")
 # load the dataset in jsonl format
 unfilled_dataset = load_dataset_from_file(dataset_path)
 
-with open(output_file, 'a') as file:
+output_full_path=os.path.join(output_dir,output_file)
+with open(output_full_path, 'a') as file:
     for batch_idx in tqdm(range(n_batches)):
         start_idx = batch_idx * search_batch_size
         end_idx = min((batch_idx + 1) * search_batch_size, len(dataset["train"]))
@@ -116,29 +120,30 @@ with open(output_file, 'a') as file:
 
             if len(filtered_indices) == 0:
                 repeat_count = 0
-                min_similar_conversation_id = None
+                min_similar_uuid = None
 
                 dataset["train"][start_idx + i]["repeat_count"] = repeat_count
-                dataset["train"][start_idx + i]["min_similar_conversation_id"] = min_similar_conversation_id
+                dataset["train"][start_idx + i]["min_similar_uuid"] = min_similar_uuid
             else:
-                min_similar_conversation_idx = int(min(filtered_indices))
-                if min_similar_conversation_idx >= start_idx + i:
-                    min_similar_conversation_id = dataset["train"][start_idx + i]["conversation_id"]
+                min_similar_uuidx = int(min(filtered_indices))
+                if min_similar_uuidx >= start_idx + i:
+                    min_similar_uuid = dataset["train"][start_idx + i]["uuid"]
                 else: 
-                    min_similar_conversation_id = dataset["train"][min_similar_conversation_idx]["conversation_id"]
+                    min_similar_uuid = dataset["train"][min_similar_uuidx]["uuid"]
                 
                 repeat_count = len(filtered_indices)
 
                 dataset["train"][start_idx + i]["repeat_count"] = repeat_count
-                dataset["train"][start_idx + i]["min_similar_conversation_id"] = min_similar_conversation_id
+                dataset["train"][start_idx + i]["min_similar_uuid"] = min_similar_uuid
 
             # save the updated dataset
             line = unfilled_dataset[start_idx + i]
             line["min_neighbor_distance"] = min_distance
             line["repeat_count"] = repeat_count
-            line["min_similar_conversation_id"] = min_similar_conversation_id
+            line["min_similar_uuid"] = min_similar_uuid
             file.write(json.dumps(line) + '\n')
             
         print(f"Batch {batch_idx} is saved to the output file")
 
 print("Distance calculation is completed.")
+print(f"Output file saved at: {output_full_path}")

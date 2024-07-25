@@ -52,11 +52,24 @@ WIP
 - reward model: WIP
 
 #### How to run?
+By default, the script runs all the tagging missions: difficulty, quality, classification, safety, reward model.
 
 ```
 cd /magpie/
 chmod +x ./scripts/blue-vela/unitag.sh
 ./scripts/blue-vela/unitag.sh
 ```
+
+To run a specific tagging mission comment out the following line before running the script
+```
+# tag_mission == "reward"
+```
+
 ## Remove repetitions
-WIP
+
+#### How to run?
+```
+cd /magpie/
+chmod +x ./scripts/blue-vela/remove-repetition.sh
+./scripts/blue-vela/remove-repetition.sh
+```
