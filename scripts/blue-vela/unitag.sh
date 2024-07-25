@@ -11,7 +11,8 @@ batch_size=1000
 device="0,1,2,3,4,5,6,7"
 
 # Modify parameters
-input_file="${WORKSPACE}/magpie/data/input_schema_example.jsonl"
+input_file="${DATA_MGT}/input_schema_example.jsonl"
+output_dir="${DATA_MGT}"
 
 if [ $input_file == "none" ]; then
     echo "[magpie.sh] Input file not provided!"
@@ -27,6 +28,7 @@ job_path=$(dirname "$input_file")
 exec > >(tee -a "$job_path/tagging.log") 2>&1
 echo "[magpie.sh] Job Path: $job_path"
 echo "[magpie.sh] Input File: $input_file"
+echo "[magpie.sh] Output Directory: $output_dir"
 echo "[magpie.sh] Tagging Mission: $tag_mission"
 echo "[magpie.sh] Model Name: $model_path"
 echo "[magpie.sh] System Config: device=$device, batch_size=$batch_size, tensor_parallel=$tensor_parallel"
@@ -41,6 +43,7 @@ if [ $tag_mission == "difficulty" ] || [ $tag_mission == "all" ]; then
         --tensor_parallel $tensor_parallel \
         --gpu_memory_utilization $gpu_memory_utilization \
         --batch_size $batch_size \
+        --output_dir $output_dir \
 
     echo "[magpie.sh] Finish Generating Difficulty Tags!"
 
@@ -64,6 +67,7 @@ if [ $tag_mission == "quality" ] || [ $tag_mission == "all" ]; then
         --tensor_parallel $tensor_parallel \
         --gpu_memory_utilization $gpu_memory_utilization \
         --batch_size $batch_size \
+        --output_dir $output_dir \
 
     echo "[magpie.sh] Finish Generating Quality Tags!"
 
@@ -87,6 +91,7 @@ if [ $tag_mission == "classification" ] || [ $tag_mission == "all" ]; then
         --tensor_parallel $tensor_parallel \
         --gpu_memory_utilization $gpu_memory_utilization \
         --batch_size $batch_size \
+        --output_dir $output_dir \
 
     echo "[magpie.sh] Finish Generating Task Tags!"
 
@@ -106,6 +111,7 @@ if [ $tag_mission == "language" ] || [ $tag_mission == "all" ]; then
         --device $device \
         --input_file $input_file \
         --tag_mission "language" \
+        --output_dir $output_dir \
 
     echo "[magpie.sh] Finish Generating Language Tags!"
 
@@ -129,6 +135,7 @@ if [ $tag_mission == "safety" ] || [ $tag_mission == "all" ]; then
         --tensor_parallel $tensor_parallel \
         --gpu_memory_utilization $gpu_memory_utilization \
         --batch_size $batch_size \
+        --output_dir $output_dir \
 
     echo "[magpie.sh] Finish Generating Safety Tags!"
 

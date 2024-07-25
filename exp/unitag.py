@@ -21,6 +21,7 @@ def get_args():
     parser.add_argument("--guard_model_path", type=str, default="allenai/wildguard", help="Guard Model.")
     parser.add_argument("--reward_model_path", type=str, default="sfairXC/FsfairX-LLaMA3-RM-v0.1", help="Reward Model.")
     parser.add_argument("--input_file", type=str, default=None, help="Input dataset file name")
+    parser.add_argument("--output_dir", type=str, default="", help="Directory path to save output files")
     parser.add_argument("--batch_size", type=int, default=1000, help="Number of samples per batch. Online <100, Offline <200.")
     parser.add_argument("--checkpoint_every", type=int, default=40, help="Save checkpoint every n batches")
     # parser.add_argument("--api", type=bool, default=False, help="Use API to generate responses")
@@ -251,6 +252,8 @@ if __name__ == "__main__":
     INSTRUCTION = "input"
     RESPONSE = "output"
     input_file = args.input_file
+    output_dir = args.output_dir
+
     # Mission Settings
     if mission == "difficulty":
         output_file = f"{input_file[:input_file.rfind('.')]}_difficulty.jsonl"
@@ -368,9 +371,9 @@ if __name__ == "__main__":
         updated_dataset = dataset
 
     if args.save_as == "json":
-        save_dataset(updated_dataset, output_file, convert_to_jsonl=False)
+        save_dataset(updated_dataset, os.path.join(output_dir,output_file), convert_to_jsonl=False)
     else:
-        save_dataset(updated_dataset, output_file, convert_to_jsonl=True)
+        save_dataset(updated_dataset, os.path.join(output_dir,output_file), convert_to_jsonl=True)
     
     # TEST - save to csv
     # import pandas as pd

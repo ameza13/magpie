@@ -1,21 +1,27 @@
 <!-- # 🐦 Magpie Fork -->
 
-This is a fork of [**Magpie**](https://magpie-align.github.io/) project. We have modified the original scripts to work with open source models: 
+# Magpie Fork
+This is a fork of [**Magpie**](https://magpie-align.github.io/) project. We have modified the original scripts to work with open source models.
+
+You can check the original project README -> [here](/README_ORIGINAL.md)
 
 ## Environment setup
 
 #### Set Environment variables
 ```
-export DATA_MGT="/path/to/your/input/data/dir" 
-export WORKSPACE="/path/to/your" 
-export HF_HOME="/path/to/your/HF_HOME"
-export HF_HUB_CACHE="/path/to/your/HF_HUB_CACHE"
+export DATA_MGT="/path/to/data/dir" # These is the directory to save input, temporal checkpoints, and final output files.
+export WORKSPACE="/path/to/parent/directory/of/this/repo" 
+export HF_HOME="/path/to/HF_HOME/dir"
+export HF_HUB_CACHE="/path/to/HF_HUB_CACHE/dir"
 ```
 
 #### Access to HF gated models
-Create a HF token and login via HF cli
-
-`huggingface-cli login` -> Type your HF Token
+- To get access to gated models, create a HF token and login via HF CLI.
+```
+pip install huggingface-cli
+huggingface-cli login # Type your HF Token
+```
+- Make sure to visit the model card of all the models required by this project, and accept the terms of use (if any).
 
 #### Create conda environment
 ```
@@ -26,19 +32,24 @@ conda activate /path/to/conda/envs/dir/magpie
 #### Install requirements
 `pip install -r requirements.txt`
 
-## Data Generation Models
+## Data preprocessing
+Convert input data to a unified schema (similar to ShareGPT schema). You can find an example of our schema [here](/data/input_schema_example.json)
+
+## Data Generation
+
+#### Generation Models
 - `mistralai/Mistral-7B-Instruct-v0.3`
 - `mistralai/Mixtral-8x22B-Instruct-v0.1`
 
-#### How to run?
+#### How to run? 
+WIP
 
-## Data Tagging Models
+## Data Tagging 
+
+#### Models
 - difficulty, quality, classification: `mistralai/Mistral-7B-Instruct-v0.3`
 - safety model: `allenai/wildguard`
 - reward model: WIP
-
-#### Data preprocessing
-Convert input data to this schema: [here](/data/input_schema_example.json)
 
 #### How to run?
 
@@ -47,5 +58,5 @@ cd /magpie/
 chmod +x ./scripts/blue-vela/unitag.sh
 ./scripts/blue-vela/unitag.sh
 ```
-
-Check the original project README -> [here](/README_ORIGINAL.md)
+## Remove repetitions
+WIP
