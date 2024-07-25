@@ -11,7 +11,7 @@ batch_size=1000
 device="0,1,2,3,4,5,6,7"
 
 # Modify parameters
-input_file="${WORKSPACE}/magpie/data/input_schema_example.json"
+input_file="${WORKSPACE}/magpie/data/input_schema_example.jsonl"
 
 if [ $input_file == "none" ]; then
     echo "[magpie.sh] Input file not provided!"

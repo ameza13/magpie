@@ -29,7 +29,7 @@ def get_args():
     # parser.add_argument("--api_url", type=str, default="https://api.together.xyz/v1/chat/completions", help="API URL")
     # parser.add_argument("--api_key", type=str, default=None, help="Together API Key")
     parser.add_argument("--debug", type=bool, default=False, help="Debug mode. Only process the first 100 samples.")
-    parser.add_argument("--save_as", type=str, default="json", choices=["json", "jsonl"], help="Save the generated responses as a what kind of file")
+    parser.add_argument("--save_as", type=str, default="jsonl", choices=["json", "jsonl"], help="Save the generated responses as a what kind of file")
 
     # vllm Configs
     parser.add_argument("--device", type=str, default="0")
@@ -78,23 +78,37 @@ def convert_safety_response_to_json(resp, c):
     output['source'] = resp # We save the source in case the conversion to json fails
     return output
 
-# Process item
+def process_safety_responses(response, item):
+    if 'safety_output' in item:
+        safety_scores = item['safety_output']
+        safety_scores.append({f'{args.guard_model_path}':response})
+    else:
+        safety_scores = [{f'{args.guard_model_path}':response}]
+    item['safety_output'] = safety_scores
+
+    if 'safety_model' in item['metadata']:
+        safety_models = item['metadata']['safety_model']
+        safety_models.append(args.guard_model_path)
+    else:
+        safety_models = [args.guard_model_path]
+    item['metadata']['safety_model'] = safety_models
+    return item
+
 def process_engine_responses(response, item, mission):
     try:
-        tags_json = json.loads(response)
+        tags_json = json.loads(response)    
         if mission == "difficulty":
             item['intent'] = tags_json['intent']
             item['knowledge'] = tags_json['knowledge']
             item['difficulty'] = tags_json['difficulty']
-            item['difficulty_generator'] = MODEL_NAME
+            item['metadata']['label_model'] = [MODEL_NAME]
         elif mission == "quality":
-            item['input_quality'] = tags_json["input_quality"]
-            item['quality_explanation'] = tags_json["explanation"]
-            item['quality_generator'] = MODEL_NAME
+            item['input_quality'] = [{f'{MODEL_NAME}':tags_json['input_quality']}]
+            item['input_quality_explanation'] = [{f'{MODEL_NAME}':tags_json["explanation"]}]
+            item['metadata']['label_model'] = [MODEL_NAME]
         elif mission == "classification":
             item['task_category'] = tags_json['primary_tag']
-            item['other_task_category'] = tags_json['other_tags']
-            item['task_category_generator'] = MODEL_NAME
+            item['metadata']['label_model'] = [MODEL_NAME]
     except Exception as e:
         print(f"[unitag.py] Failed to process item with error: {str(e)}")
         print(f"[unitag.py] Raw response from LLM tagger: {response}")
@@ -102,16 +116,14 @@ def process_engine_responses(response, item, mission):
             item['intent'] = None
             item['knowledge'] = None
             item['difficulty'] = None
-            item['difficulty_generator'] = None
+            item['metadata']['label_model'] = None
         elif mission == "quality":
             item['input_quality'] = None
             item['quality_explanation'] = None
-            item['quality_generator'] = None
+            item['metadata']['label_model'] = None
         elif mission == "classification":
             item['task_category'] = None
-            item['other_task_category'] = None
-            item['task_category_generator'] = None
-
+            item['metadata']['label_model'] = None
     return item
 
 # Process a batch of data for: difficulty, quality, and classification missions
@@ -120,13 +132,13 @@ def process_batch(batch, llm, params, mission, tokenizer=None):
     for i, item in enumerate(batch):
         chat = [{"role": "user", "content": template_generator(item[INSTRUCTION], mission)}]
         template = llm.llm_engine.tokenizer.tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
-        template += "{" # TO DO: Do we need it?, Yes
+        template += "{" # Do we need it?, Yes
         prompts.append(template)
 
     # TEST
-    print("=TEST=")
-    print(f"Mission: {mission}")
-    print(f"Prompt Example: {prompts[0]}")
+    # print("=TEST=")
+    # print(f"Mission: {mission}")
+    # print(f"Prompt Example: {prompts[0]}")
 
     outputs = llm.generate(prompts, params)
 
@@ -139,6 +151,7 @@ def process_batch(batch, llm, params, mission, tokenizer=None):
     
     return batch
 
+# TO DO: Refactor this method to work with an OS reward model
 def process_batch_with_reward_model(batch, rm_pipe, rm_pipe_kwargs):
     prompts = []
     for i, item in enumerate(batch):
@@ -165,6 +178,7 @@ def process_batch_with_reward_model(batch, rm_pipe, rm_pipe_kwargs):
             item['reward_model'] = args.reward_model_path
     return batch
 
+# wildguard
 def process_batch_with_guard_model(batch, s_model, sm_kwargs):
     inputs = []
     for instance in batch:
@@ -174,14 +188,13 @@ def process_batch_with_guard_model(batch, s_model, sm_kwargs):
     str_max_length = max(inputs, key = len)
     print(f"Max Length in batch: {len(str_max_length)}") # TEST
 
-    # TO DO: Assign values to params from sm_kwargs
     tokenized_inputs = sm_tokenizer(inputs, 
                                     return_tensors='pt',
                                     add_special_tokens=False,
                                     truncation=True,
                                     padding='max_length',
                                     max_length=len(str_max_length))
-    results = s_model.generate(**tokenized_inputs, max_new_tokens=32)
+    results = s_model.generate(**tokenized_inputs, max_new_tokens=sm_kwargs["max_new_tokens"])
 
     inputs_decoded = sm_tokenizer.batch_decode(tokenized_inputs['input_ids'], skip_special_tokens=True)
     results_decoded = sm_tokenizer.batch_decode(results, skip_special_tokens=True)
@@ -192,13 +205,13 @@ def process_batch_with_guard_model(batch, s_model, sm_kwargs):
         # print(f"Result: {result_decoded}")
 
         resp = result_decoded[len(input_decoded):]
-        resp_json = convert_safety_response_to_json(resp,'\n')
+        wildguard_json = convert_safety_response_to_json(resp,'\n')
 
         # print(f"=Response=\n{resp}") # TEST
-        # print(f"=Response json=\n{resp_json}") # TEST
+        # print(f"=Response json=\n{wildguard_json}") # TEST
 
-        item['wildguard'] = resp_json
-        item['safety_model'] = args.guard_model_path 
+        # Update output
+        process_safety_responses(wildguard_json, item)
     return batch
 
 # Generate outputs, update dataset in batches, and overwrite checkpoint
@@ -341,18 +354,17 @@ if __name__ == "__main__":
         updated_dataset = generate_and_update(dataset, mission, llm, params, rm_pipe, rm_pipe_kwargs, s_model, sm_kwargs,batch_size, checkpoint_file, checkpoint_every)
     
     else:
-        # Language Detection using lingua
         print("[unitag.py] Start language detection engine...")
         detector = LanguageDetectorBuilder.from_all_languages().build()
         for item in tqdm(dataset):
             if item[INSTRUCTION] != "":
                 try:
-                    item['language'] = detector.detect_language_of(item[INSTRUCTION]).iso_code_639_1.name
+                    item['language_identify'] = detector.detect_language_of(item[INSTRUCTION]).iso_code_639_1.name
                 except Exception as e:
                     print(f"Failed to process item with error: {str(e)}")
-                    item['language'] = None
+                    item['language_identify'] = None
             else:
-                item['language'] = None
+                item['language_identify'] = None
         updated_dataset = dataset
 
     if args.save_as == "json":

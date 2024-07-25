@@ -41,7 +41,7 @@ def input_safety_rating(prompt, response):
     '''
     return instruction_format
 
-def convert_to_json(resp, c):
+def convert_safety_response_to_json(resp, c):
     lines = resp.split(c)
     output = {}
     try:
@@ -83,7 +83,7 @@ if __name__ == "__main__":
         # print(f"Input len: {len(input_decoded)}")
         # print(f"Result: {result_decoded}")
         resp = result_decoded[len(input_decoded):]
-        resp_dict = convert_to_json(result_decoded[len(input_decoded):],"\n")
+        resp_dict = convert_safety_response_to_json(result_decoded[len(input_decoded):],"\n")
         resp_json = json.dumps(resp_dict)
 
         print(f"=Response=\n{resp}")
