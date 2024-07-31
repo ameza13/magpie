@@ -62,7 +62,7 @@ chmod +x ./scripts/blue-vela/unitag.sh
 
 To run a specific tagging mission comment out the following line before running the script
 ```
-# tag_mission == "reward"
+# tag_mission="reward"
 ```
 
 ## Remove repetitions

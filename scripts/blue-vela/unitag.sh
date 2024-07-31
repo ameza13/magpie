@@ -24,6 +24,8 @@ if [ ! -f $input_file ]; then
     exit 1
 fi
 
+# tag_mission="reward" # Will only run reward
+
 # get job path from input file
 job_path=$(dirname "$input_file")
 exec > >(tee -a "$job_path/tagging.log") 2>&1
@@ -175,26 +177,26 @@ fi
 # fi
 
 # TO DO: Define what reward model we should use
-# if [ $tag_mission == "reward" ] || [ $tag_mission == "all" ]; then
-#     echo "[magpie.sh] Start Generating Reward Tags..."
-#     python ${WORKSPACE}/magpie/exp/unitag.py \
-#         --device $device \
-#         --reward_model_path $reward_model_path \
-#         --input_file $input_file \
-#         --tag_mission "reward" \
-#         --tensor_parallel $tensor_parallel \
-#         --batch_size 1 \
+if [ $tag_mission == "reward" ] || [ $tag_mission == "all" ]; then
+    echo "[magpie.sh] Start Generating Reward Tags..."
+    python ${WORKSPACE}/magpie/exp/unitag.py \
+        --device $device \
+        --reward_model_path $reward_model_path \
+        --input_file $input_file \
+        --tag_mission "reward" \
+        --tensor_parallel $tensor_parallel \
+        --batch_size 1 \
 
-#     echo "[magpie.sh] Finish Generating Reward Tags!"
+    echo "[magpie.sh] Finish Generating Reward Tags!"
 
-#     # Change input file name to quality tagged file
-#     input_file_name=$(basename $input_file)
-#     input_file_dir=$(dirname $input_file)
-#     input_file_name_no_ext="${input_file_name%.*}"
-#     input_file_ext="${input_file_name##*.}"
-#     reward_tag_file="${input_file_dir}/${input_file_name_no_ext}_reward.${input_file_ext}"
-#     input_file=$reward_tag_file
-#     echo "[magpie.sh] Reward Tagged File: $input_file"
-# fi
+    # Change input file name to quality tagged file
+    input_file_name=$(basename $input_file)
+    input_file_dir=$(dirname $input_file)
+    input_file_name_no_ext="${input_file_name%.*}"
+    input_file_ext="${input_file_name##*.}"
+    reward_tag_file="${input_file_dir}/${input_file_name_no_ext}_reward.${input_file_ext}"
+    input_file=$reward_tag_file
+    echo "[magpie.sh] Reward Tagged File: $input_file"
+fi
 
 echo "[magpie.sh] Finish Tagging Mission: $tag_mission"
