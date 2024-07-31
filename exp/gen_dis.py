@@ -8,6 +8,7 @@ import argparse
 import json
 from tqdm import tqdm
 from utils import load_dataset_from_file
+import time
 
 ################
 # Configurations
@@ -29,6 +30,8 @@ def get_args():
     
     return parser.parse_args()
 
+start = time.time()
+
 args = get_args()
 
 sentence_model = args.sentence_model
@@ -43,6 +46,8 @@ output_file = f"{dataset_name[:dataset_name.rfind('.')]}_distance.jsonl"
 # Load the dataset
 dataset = load_dataset("json", data_files=dataset_path)
 print(dataset)
+print(dataset["train"].features)
+
 inputs = dataset["train"]["input"]
 print(f"The second instruction in the dataset is: {inputs[1]}")
 
@@ -83,9 +88,9 @@ if args.save_faiss_index:
 ################
 # Step 2 - Find Similar Examples
 ################
-distance_threshold = args.distance_distance_threshold
-search_space_size = args.search_space_size
-search_batch_size = args.search_batch_size
+distance_threshold = args.distance_distance_threshold #0.05
+search_space_size = args.search_space_size #500
+search_batch_size = args.search_batch_size #1024
 n_batches = (len(dataset["train"]) + search_batch_size - 1) // search_batch_size
 print(f"Number of batches: {n_batches}")
 
@@ -147,3 +152,6 @@ with open(output_full_path, 'a') as file:
 
 print("Distance calculation is completed.")
 print(f"Output file saved at: {output_full_path}")
+
+end = time.time()
+print(f"Total computation takes: {end-start} s")

@@ -7,8 +7,9 @@ import torch
 from vllm import LLM, SamplingParams
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 from utils import load_dataset_from_file, save_dataset
-from str_utils import input_difficulty_rating, input_classification, input_quality_rating, input_safety_rating
+from str_utils import input_difficulty_rating, input_classification, input_quality_rating, input_safety_rating,sample_quality_rating
 from lingua import Language, LanguageDetectorBuilder
+import time
 
 ################
 # Configurations
@@ -16,7 +17,7 @@ from lingua import Language, LanguageDetectorBuilder
 def get_args():
     # Experiment Settings
     parser = argparse.ArgumentParser(description="Unified Tagging Manager.")
-    parser.add_argument("--tag_mission", type=str, default="quality", help="The tagging mission.", choices=["difficulty", "quality", "classification", "safety", "reward", "language"])
+    parser.add_argument("--tag_mission", type=str, default="quality", help="The tagging mission.", choices=["difficulty", "quality", "classification", "safety", "reward", "language", "sample_quality"])
     parser.add_argument("--model_path", type=str, default="mistralai/Mistral-7B-Instruct-v0.3", help="Tag Model.")
     parser.add_argument("--guard_model_path", type=str, default="allenai/wildguard", help="Guard Model.")
     parser.add_argument("--reward_model_path", type=str, default="sfairXC/FsfairX-LLaMA3-RM-v0.1", help="Reward Model.")
@@ -56,15 +57,17 @@ checkpoint_every = args.checkpoint_every if args.tag_mission != "reward" else ar
 batch_size = args.batch_size
 mission = args.tag_mission
 
-def template_generator(input, mission):
+def template_generator(input, mission, output=""):
     if mission == "difficulty":
         return input_difficulty_rating(input)
     elif mission == "quality":
         return input_quality_rating(input)
     elif mission == "classification":
         return input_classification(input)
+    elif mission == "sample_quality":
+        return sample_quality_rating(input,output)
     else:
-        raise ValueError("Invalid mission. Available missions: difficulty, quality, classification")
+        raise ValueError("Invalid mission. Available missions: difficulty, quality, classification, sample_quality")
 
 # Process safety item
 def convert_safety_response_to_json(resp, c):
@@ -95,43 +98,112 @@ def process_safety_responses(response, item):
     item['metadata']['safety_model'] = safety_models
     return item
 
+def get_item(item, correct_type):
+    correct_type = isinstance(item, correct_type)
+    if not correct_type:
+        print(f"[unitag.py] Failed to process item with error: incorrect type in assesment response")
+        print(f"\ttype: {type(item)}")
+        print(f"\tvalue: {item}")
+    return correct_type
+
+def set_empty_values(item, mission):
+    if mission == "difficulty":
+        item['intent'] = None
+        item['knowledge'] = None
+        item['difficulty'] = None
+        item['metadata']['label_model'] = None
+    elif mission == "quality":
+        item['input_quality'] = None
+        item['input_quality_explanation'] = None
+        item['metadata']['label_model'] = None
+    elif mission == "classification":
+        item['task_category'] = None
+        item['metadata']['label_model'] = None
+    elif mission == "sample_quality":
+        item['judge_quality_score'] = None
+        item['judge_quality_explanation'] = None
+        item['metadata']['label_model'] = None 
+    return item
+
 def process_engine_responses(response, item, mission):
     try:
+        # Attempt to load response as json 
         tags_json = json.loads(response)    
         if mission == "difficulty":
-            item['intent'] = tags_json['intent']
-            item['knowledge'] = tags_json['knowledge']
-            item['difficulty'] = tags_json['difficulty']
+            # Check difficulty format
+            correct_type = get_item(tags_json['difficulty'], str)
+            if not correct_type:
+                item = set_empty_values(item, mission)
+                return item
+            
+            # Only saves the LLM response if json format is valid and the score has correct format
+            intent = {}
+            intent[f'{MODEL_NAME}'] = tags_json['intent']
+            knowledge = {}
+            knowledge[f'{MODEL_NAME}'] = tags_json['knowledge']
+            difficulty = {}
+            difficulty[f'{MODEL_NAME}'] = tags_json['difficulty']
+            
+            item['intent'] = [intent]
+            item['knowledge'] = [knowledge]
+            item['difficulty'] = [difficulty]
+
             item['metadata']['label_model'] = [MODEL_NAME]
         elif mission == "quality":
-            item['input_quality'] = [{f'{MODEL_NAME}':tags_json['input_quality']}]
-            item['input_quality_explanation'] = [{f'{MODEL_NAME}':tags_json["explanation"]}]
+            # Check input_quality format
+            correct_type = get_item(tags_json['input_quality'], str)
+            if not correct_type:
+                item = set_empty_values(item, mission)
+                return item
+            
+            input_quality = {}
+            input_quality[f'{MODEL_NAME}'] = tags_json['input_quality']
+            input_quality_explanation = {}
+            input_quality_explanation[f'{MODEL_NAME}'] = tags_json['explanation'] # Does it crash because of breaklines?
+
+            item['input_quality'] = [input_quality]
+            item['input_quality_explanation'] = [input_quality_explanation]
+
             item['metadata']['label_model'] = [MODEL_NAME]
         elif mission == "classification":
-            item['task_category'] = tags_json['primary_tag']
+            # Check input_quality format
+            correct_type = get_item(tags_json['primary_tag'], str)
+            if not correct_type:
+                item = set_empty_values(item, mission)
+                return item
+            
+            task_category = {}
+            task_category[f'{MODEL_NAME}'] = tags_json["primary_tag"]
+            item['task_category'] = [task_category]
+            
             item['metadata']['label_model'] = [MODEL_NAME]
+        elif mission == "sample_quality":
+            # Check input_quality format
+            correct_type = get_item(tags_json['score'], str)
+            if not correct_type:
+                item = set_empty_values(item, mission)
+                return item
+            
+            sample_quality_score = {}
+            sample_quality_score[f'{MODEL_NAME}'] = tags_json['score']
+            sample_quality_explanation = {}
+            sample_quality_explanation[f'{MODEL_NAME}'] = tags_json['explanation'] # Does it crash because of breaklines?
+
+            item['judge_quality_score'] = [sample_quality_score]
+            item['judge_quality_explanation'] = [sample_quality_explanation]
+
+            item['metadata']['label_model'] = [MODEL_NAME]           
     except Exception as e:
         print(f"[unitag.py] Failed to process item with error: {str(e)}")
         print(f"[unitag.py] Raw response from LLM tagger: {response}")
-        if mission == "difficulty":
-            item['intent'] = None
-            item['knowledge'] = None
-            item['difficulty'] = None
-            item['metadata']['label_model'] = None
-        elif mission == "quality":
-            item['input_quality'] = None
-            item['quality_explanation'] = None
-            item['metadata']['label_model'] = None
-        elif mission == "classification":
-            item['task_category'] = None
-            item['metadata']['label_model'] = None
+        item = set_empty_values(item, mission)
     return item
 
 # Process a batch of data for: difficulty, quality, and classification missions
 def process_batch(batch, llm, params, mission, tokenizer=None):
     prompts = []
     for i, item in enumerate(batch):
-        chat = [{"role": "user", "content": template_generator(item[INSTRUCTION], mission)}]
+        chat = [{"role": "user", "content": template_generator(item[INSTRUCTION], mission, item[RESPONSE])}]
         template = llm.llm_engine.tokenizer.tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
         template += "{" # Do we need it?, Yes
         prompts.append(template)
@@ -249,6 +321,8 @@ def generate_and_update(dataset, mission, llm, params, rm_pipe, rm_pipe_kwargs, 
     return dataset
 
 if __name__ == "__main__":
+    start = time.time()
+
     INSTRUCTION = "input"
     RESPONSE = "output"
     input_file = args.input_file
@@ -275,6 +349,9 @@ if __name__ == "__main__":
     elif mission == "language":
         output_file = f"{input_file[:input_file.rfind('.')]}_language.jsonl"
         checkpoint_file = f"{input_file[:input_file.rfind('.')]}_language_checkpoint.json"
+    elif mission == "sample_quality":
+        output_file = f"{input_file[:input_file.rfind('.')]}_sample-quality.jsonl"
+        checkpoint_file = f"{input_file[:input_file.rfind('.')]}_sample-quality_checkpoint.json"
     else:
         raise ValueError("Invalid mission. Available missions: difficulty, quality, classification, safety, reward, language")
     # Change jsonl to json if args.save_as is json
@@ -290,6 +367,8 @@ if __name__ == "__main__":
         # checkpoint_file = f"{output_file[:output_file.rfind('.')]}_debug.jsonl"
         # checkpoint_file = f"{output_file[:output_file.rfind('.')]}_debug_checkpoint.json"
 
+    print(f"Processing {len(dataset)} samples")
+    
     if mission != "language":
         if args.tag_mission == "reward":
             # Currently vllm do not support reward model inference, use transformer pipeline instead
@@ -312,7 +391,7 @@ if __name__ == "__main__":
         elif args.tag_mission == "safety":
             # Currently vllm do not support safety model inference, use transformer inference instead
             # tokenizer = sm_tokenizer
-            s_model = AutoModelForCausalLM.from_pretrained( args.guard_model_path)
+            s_model = AutoModelForCausalLM.from_pretrained(args.guard_model_path)
     
             sm_kwargs = {
                 "max_new_tokens" : 32
@@ -325,7 +404,7 @@ if __name__ == "__main__":
             print("[unitag.py] Start Local vllm engine...")
             os.environ["CUDA_VISIBLE_DEVICES"] = args.device
 
-            llm = LLM(model=MODEL_NAME if not args.tag_mission == "safety" else args.guard_model_path,
+            llm = LLM(model=MODEL_NAME,
                         dtype=args.dtype,
                         quantization=args.quantization,
                         kv_cache_dtype=args.kv_cache_dtype,
@@ -385,3 +464,6 @@ if __name__ == "__main__":
     if os.path.exists(checkpoint_file):
         os.remove(checkpoint_file)
         print("[unitag.py] Final dataset saved. Checkpoint removed.")
+    end = time.time()
+
+    print(f"Total computation takes: {end-start} s")

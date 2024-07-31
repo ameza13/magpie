@@ -1,3 +1,4 @@
+# Application starts here
 input_file=${1:-"none"}
 tag_mission=${2:-"all"}
 device=${3:-"0"}
@@ -125,29 +126,53 @@ if [ $tag_mission == "language" ] || [ $tag_mission == "all" ]; then
     echo "[magpie.sh] Language Tagged File: $input_file"
 fi
 
-if [ $tag_mission == "safety" ] || [ $tag_mission == "all" ]; then
-    echo "[magpie.sh] Start Generating Safety Tags..."
+if [ $tag_mission == "sample_quality" ] || [ $tag_mission == "all" ]; then
+    echo "[magpie.sh] Start Generating Quality Tags..."
     CUDA_VISIBLE_DEVICES=$device python ${WORKSPACE}/magpie/exp/unitag.py \
         --device $device \
-        --guard_model_path $guard_model_path \
+        --model_path $model_path \
         --input_file $input_file \
-        --tag_mission "safety" \
+        --tag_mission "sample_quality" \
         --tensor_parallel $tensor_parallel \
         --gpu_memory_utilization $gpu_memory_utilization \
         --batch_size $batch_size \
         --output_dir $output_dir \
 
-    echo "[magpie.sh] Finish Generating Safety Tags!"
+    echo "[magpie.sh] Finish Generating Quality Tags!"
 
-    # Change input file name to quality tagged file
+    # Change input file name to sample quality tagged file
     input_file_name=$(basename $input_file)
     input_file_dir=$(dirname $input_file)
     input_file_name_no_ext="${input_file_name%.*}"
     input_file_ext="${input_file_name##*.}"
-    safety_tag_file="${input_file_dir}/${input_file_name_no_ext}_safety.${input_file_ext}"
-    input_file=$safety_tag_file
-    echo "[magpie.sh] Safety Tagged File: $input_file"
+    sample_quality_tag_file="${input_file_dir}/${input_file_name_no_ext}_sample-quality.${input_file_ext}"
+    input_file=$sample_quality_tag_file
+    echo "[magpie.sh] Quality Tagged File: $input_file"
 fi
+
+# if [ $tag_mission == "safety" ] || [ $tag_mission == "all" ]; then
+#     echo "[magpie.sh] Start Generating Safety Tags..."
+#     CUDA_VISIBLE_DEVICES=$device python ${WORKSPACE}/magpie/exp/unitag.py \
+#         --device $device \
+#         --guard_model_path $guard_model_path \
+#         --input_file $input_file \
+#         --tag_mission "safety" \
+#         --tensor_parallel $tensor_parallel \
+#         --gpu_memory_utilization $gpu_memory_utilization \
+#         --batch_size $batch_size \
+#         --output_dir $output_dir \
+
+#     echo "[magpie.sh] Finish Generating Safety Tags!"
+
+#     # Change input file name to quality tagged file
+#     input_file_name=$(basename $input_file)
+#     input_file_dir=$(dirname $input_file)
+#     input_file_name_no_ext="${input_file_name%.*}"
+#     input_file_ext="${input_file_name##*.}"
+#     safety_tag_file="${input_file_dir}/${input_file_name_no_ext}_safety.${input_file_ext}"
+#     input_file=$safety_tag_file
+#     echo "[magpie.sh] Safety Tagged File: $input_file"
+# fi
 
 # TO DO: Define what reward model we should use
 # if [ $tag_mission == "reward" ] || [ $tag_mission == "all" ]; then
