@@ -73,3 +73,7 @@ cd /magpie/
 chmod +x ./scripts/blue-vela/remove-repetition.sh
 ./scripts/blue-vela/remove-repetition.sh
 ```
+
+## Datasets filtering
+
+Check notebook: ```./data/blue_data_filter.ipynb```
