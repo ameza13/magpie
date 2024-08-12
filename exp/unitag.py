@@ -5,7 +5,7 @@ from tqdm import tqdm
 import argparse
 import torch
 from vllm import LLM, SamplingParams
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSequenceClassification, pipeline
 from utils import load_dataset_from_file, save_dataset
 from str_utils import input_difficulty_rating, input_classification, input_quality_rating, input_safety_rating,sample_quality_rating
 from lingua import Language, LanguageDetectorBuilder
@@ -53,6 +53,8 @@ args = get_args()
 print(f"[unitag.py] Unified Tagging Manager. Arguments: {args}") # For logging
 
 MODEL_NAME = args.model_path
+# R_MODEL_NAME = args.reward_model_path
+R_MODEL_NAME="blue/reward-model" # TEMP: We loaded the reward model weights from a local path, as a local path is sensitive info we temporarily identify this reward mdoel as blue/reward-model
 checkpoint_every = args.checkpoint_every if args.tag_mission != "reward" else args.checkpoint_every*100
 batch_size = args.batch_size
 mission = args.tag_mission
@@ -224,31 +226,66 @@ def process_batch(batch, llm, params, mission, tokenizer=None):
     
     return batch
 
-# TO DO: Refactor this method to work with an OS reward model
-def process_batch_with_reward_model(batch, rm_pipe, rm_pipe_kwargs):
-    prompts = []
+# BATCH
+# def process_batch_with_reward_model(batch, rm_model, rm_tokenizer):
+#     prompts = []
+#     for i, item in enumerate(batch):
+#         input = item[INSTRUCTION]
+#         output = item[RESPONSE]
+#         template = f'<s> [INST]{input}[/INST]{output}</s>'
+#         prompts.append(template)
+        
+#     # print(prompts) # TEST
+#     outputs = rm_tokenizer(prompts, return_tensors='pt').to(device)
+    
+#     # str_max_length = max(prompts, key = len)
+#     # outputs = rm_tokenizer(prompts, 
+#     #           return_tensors='pt',
+#     #           truncation=True,
+#     #           padding='max_length', 
+#     #           max_length=len(str_max_length)).to(device)
+
+#     outputs = rm_tokenizer(prompts, return_tensors='pt').to(device)
+#     scores = rm_model(**outputs)[0]
+#     rm_model.eval().requires_grad_(False) # To save memory during inference
+        
+#     for i, item in enumerate(batch):
+#         try:
+#             task_reward = {}
+#             task_reward[f'{R_MODEL_NAME}'] = scores[i].item()
+#             item['reward_quality_score'] = [task_reward]
+#             item['metadata']['reward_model'] = [R_MODEL_NAME]
+#         except Exception as e:
+#             print(f"Failed to process item: {item} with error: {str(e)}")
+#             item['reward_quality_score'] = None
+#             item['metadata']['reward_model'] = None 
+#     return batch
+
+# TEMPORAL: 1 by 1
+def process_batch_with_reward_model(batch, rm_model, rm_tokenizer):
+    scores = []
     for i, item in enumerate(batch):
         input = item[INSTRUCTION]
         output = item[RESPONSE]
-        chat = [
-            {"role": "user", "content": f"{input}"},
-            {"role": "assistant", "content": f"{output}"},
-        ]
-        template = rm_tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=False).replace(rm_tokenizer.bos_token, "")
-        prompts.append(template)
+        template = f'<s> [INST]{input}[/INST]{output}</s>'
+        try:
+            output = rm_tokenizer(template, return_tensors='pt').to(device)
+            scores.append(rm_model(**output)[0])
+            rm_model.eval().requires_grad_(False) # To save memory during inference
+        except Exception as e:
+            print(f"Error:{item['uuid']}, {len(item['input'])}, {len(item['output'])}")
+            scores.append(-1000000.0) # - 1M to use as filter due to input/output lengths that the RM cannot process 
     
-    outputs = rm_pipe(prompts, **rm_pipe_kwargs)
-    scores = [output[0]["score"] for output in outputs]
-
     for i, item in enumerate(batch):
         try:
-            item['instruct_reward'] = scores[i]
-            item['reward_model'] = args.reward_model_path
+            task_reward = {}
+            task_reward[f'{R_MODEL_NAME}'] = scores[i].item()
+            item['reward_quality_score'] = [task_reward]
+            item['metadata']['reward_model'] = [R_MODEL_NAME]
         except Exception as e:
             print(f"Failed to process item: {item} with error: {str(e)}")
-
-            item['instruct_reward'] = None
-            item['reward_model'] = args.reward_model_path
+            item['reward_quality_score'] = None # For -1000000.0 values it will really assign None.
+            item['metadata']['reward_model'] = None 
     return batch
 
 # wildguard
@@ -288,7 +325,7 @@ def process_batch_with_guard_model(batch, s_model, sm_kwargs):
     return batch
 
 # Generate outputs, update dataset in batches, and overwrite checkpoint
-def generate_and_update(dataset, mission, llm, params, rm_pipe, rm_pipe_kwargs, s_model,sm_kwargs, batch_size, checkpoint_file, checkpoint_every = 20):
+def generate_and_update(dataset, mission, llm, params, rm_model, rm_tokenizer, s_model,sm_kwargs, batch_size, checkpoint_file, checkpoint_every = 20):
     if os.path.exists(checkpoint_file):
         last_checkpoint_idx = len(load_dataset_from_file(checkpoint_file))
         print(f"[unitag.py] Checkpoint file found. Resuming from last checkpoint with index {last_checkpoint_idx}.")
@@ -305,8 +342,10 @@ def generate_and_update(dataset, mission, llm, params, rm_pipe, rm_pipe_kwargs, 
         end_idx = min((i + 1) * batch_size + last_checkpoint_idx, len(dataset))
         batch = dataset[start_idx:end_idx]
 
+        print(f'Batch size: {len(batch)}')
+        
         if mission == "reward":
-            batch = process_batch_with_reward_model(batch, rm_pipe, rm_pipe_kwargs)
+            batch= process_batch_with_reward_model(batch, rm_model, rm_tokenizer)
         elif mission == "safety":
             process_batch_with_guard_model(batch,s_model,sm_kwargs)
         else:
@@ -339,11 +378,11 @@ if __name__ == "__main__":
         output_file = f"{input_file[:input_file.rfind('.')]}_category.jsonl"
         checkpoint_file = f"{input_file[:input_file.rfind('.')]}_category_checkpoint.json"
     elif mission == "safety":
-        sm_tokenizer = AutoTokenizer.from_pretrained(args.guard_model_path)
+        # sm_tokenizer = AutoTokenizer.from_pretrained(args.guard_model_path) # Create it at the same time than model
         output_file = f"{input_file[:input_file.rfind('.')]}_safety.jsonl"
         checkpoint_file = f"{input_file[:input_file.rfind('.')]}_safety_checkpoint.json"
     elif mission == "reward":
-        rm_tokenizer = AutoTokenizer.from_pretrained(args.reward_model_path)
+        # rm_tokenizer = AutoTokenizer.from_pretrained(args.reward_model_path) # Create it at the same time than model
         output_file = f"{input_file[:input_file.rfind('.')]}_reward.jsonl"
         checkpoint_file = f"{input_file[:input_file.rfind('.')]}_reward_checkpoint.json"
     elif mission == "language":
@@ -371,35 +410,31 @@ if __name__ == "__main__":
     
     if mission != "language":
         if args.tag_mission == "reward":
-            # Currently vllm do not support reward model inference, use transformer pipeline instead
-            rm_pipe = pipeline(
-                "sentiment-analysis",
-                model=args.reward_model_path,
-                device=int(args.device),
-                tokenizer=rm_tokenizer,
-                model_kwargs={"torch_dtype": torch.float16}
-            )
-            rm_pipe_kwargs = {
-                "return_all_scores": True,
-                "function_to_apply": "none",
-                "batch_size": batch_size,
-            }
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            print(f"Using device: {device}")
+            
+            rm_model = AutoModelForSequenceClassification.from_pretrained(args.reward_model_path, 
+                                                                          torch_dtype=torch.float16).to(device)
+            rm_tokenizer = AutoTokenizer.from_pretrained(args.reward_model_path)
+            
             s_model = None
             sm_kwargs = None
             llm = None
             params = None
         elif args.tag_mission == "safety":
             # Currently vllm do not support safety model inference, use transformer inference instead
-            # tokenizer = sm_tokenizer
+            sm_tokenizer = AutoTokenizer.from_pretrained(args.guard_model_path)
             s_model = AutoModelForCausalLM.from_pretrained(args.guard_model_path)
     
             sm_kwargs = {
                 "max_new_tokens" : 32
             }
-            rm_pipe = None 
-            rm_pipe_kwargs = None
+            # rm_pipe = None 
+            # rm_pipe_kwargs = None
             llm = None
             params = None
+            rm_model= None
+            rm_tokenizer=None
         else:
             print("[unitag.py] Start Local vllm engine...")
             os.environ["CUDA_VISIBLE_DEVICES"] = args.device
@@ -430,11 +465,12 @@ if __name__ == "__main__":
     
             s_model = None
             sm_kwargs = None
-            rm_pipe = None
-            rm_pipe_kwargs = None
+            # rm_pipe = None
+            # rm_pipe_kwargs = None
+            rm_model= None
+            rm_tokenizer=None
 
-        updated_dataset = generate_and_update(dataset, mission, llm, params, rm_pipe, rm_pipe_kwargs, s_model, sm_kwargs,batch_size, checkpoint_file, checkpoint_every)
-    
+        updated_dataset = generate_and_update(dataset, mission, llm, params, rm_model, rm_tokenizer, s_model,sm_kwargs, batch_size, checkpoint_file, checkpoint_every)
     else:
         print("[unitag.py] Start language detection engine...")
         detector = LanguageDetectorBuilder.from_all_languages().build()
