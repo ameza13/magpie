@@ -1,7 +1,12 @@
 import json
 import os
+import argparse
 from datasets import load_dataset
 
+"""
+python /$WORKSPACE/magpie/exp/filter.py --input_dir /input/dir/path/ --output_dir /output/dir/path --dataset_name dataset_file_name.jsonl
+
+"""
 # File I/O utilities
 def load_jsonl_to_list(jsonl_file_path):
     data_list = []
@@ -69,25 +74,46 @@ def validate_scores_format(example):
 def high_quality_filter(example):
    return (
        example['input_quality'] in ['good','excellent']
-       and example['judge_quality_score'] in ['4','5']
+       and example['judge_quality_score'] in ['5']
        # and example['reward_quality_score'] > -10 # This is the way MagPie is using the reward model score
-       # and (
-       #     example['min_similar_uuid'] is None
-       #     or example['uuid'] == example['min_similar_uuid']
-       # )
+       and (
+           example['min_similar_uuid'] is None
+           or example['uuid'] == example['min_similar_uuid']
+       )
    )
    
+def get_args():
+    # Experiment Settings
+    parser = argparse.ArgumentParser(description="Filtering")
+    parser.add_argument("--input_dir", type=str, default=None, help="Directory with input file")
+    parser.add_argument("--output_dir", type=str, default=None, help="Directory to save output files")
+    parser.add_argument("--dataset_name", type=str, default=None, help="File name of dataset including extension")
+
+    # System Settings
+    parser.add_argument("--device", type=int, default=0)
+    parser.add_argument("--save_faiss_index", type=bool, default=True, help="Save the Faiss index.")
+    
+    return parser.parse_args()
+
 if __name__ == "__main__":
+    
+    args = get_args()
+    
     # Input dirs
-    dir = "/path/to/input/dir"
+    dir = args.input_dir
 
     # Output dirs
-    output_dir = "/path/to/output/dir"
-    
+    output_dir = args.output_dir
+   
     # Input dataset
-    ds_number = '58'
-    dataset_name="58_blue_sharegpt_v1_difficulty_quality_category_language_sample-quality_rewar_distance.jsonl" # Type here the dataset name
+    dataset_name = args.dataset_name
+    ds_number = dataset_name.partition('_')[0]
     
+    print(f"input dir: {dir}")
+    print(f"output dir: {output_dir}")
+    print(f"dataset name: {dataset_name}")
+    print(f"dataset number: {ds_number}")
+
     # Load dataset
     dataset_path = os.path.join(dir, dataset_name)
     dataset = load_dataset("json", 

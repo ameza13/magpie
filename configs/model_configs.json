@@ -177,6 +177,27 @@
     "pre_query_template_math": "<s> [INST] You are an AI assistant designed to provide helpful, step-by-step guidance on solving math problems. The user will ask you a wide range of complex mathematical questions.\nYour purpose is to assist users in understanding mathematical concepts, working through equations, and arriving at the correct solutions.",
     "mt_append_template": ""
   },
+  "mistralai/Mistral-Nemo-Instruct-2407": {
+    "model_name": "mistralai/Mistral-Nemo-Instruct-2407",
+    "stop_tokens": [
+      "<s>",
+      "</s>",
+      "[INST]",
+      "[/INST]"
+    ],
+    "stop_token_ids": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "stop_tokens_assistant": [
+      "assistant"
+    ],
+    "pre_query_template": "<s> [INST] ",
+    "pre_query_template_math": "<s> [INST] You are an AI assistant designed to provide helpful, step-by-step guidance on solving math problems. The user will ask you a wide range of complex mathematical questions.\nYour purpose is to assist users in understanding mathematical concepts, working through equations, and arriving at the correct solutions.",
+    "mt_append_template": ""
+  },
   "google/gemma-1.1-7b-it": {
     "model_name": "google/gemma-1.1-7b-it",
     "stop_tokens": [

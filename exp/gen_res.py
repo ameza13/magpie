@@ -57,7 +57,7 @@ CHECKPOINT_EVERY = args.checkpoint_every
 SAVED_FILE = f"{INPUT_FILE_NAME[:INPUT_FILE_NAME.rfind('.')]}_res.json"
 
 # Obtain config from configs/model_configs.json
-CONFIG_FILE_PATH = os.path.join(os.environ['HOME'],"/workspace/magpie/configs/model_configs.json")
+CONFIG_FILE_PATH = os.path.join(os.environ['WORKSPACE'],"magpie/configs/model_configs.json")
 with open(CONFIG_FILE_PATH, "r", encoding="utf-8") as f:
     model_configs = json.load(f)
     model_config = model_configs[args.model_path]
