@@ -1,6 +1,5 @@
 import os
 from datasets import load_dataset
-from datasets import Dataset
 
 import json
 import pandas as pd
@@ -25,11 +24,20 @@ def load_dataset_from_file(filename):
     else:
         raise ValueError("Invalid file format. Please provide a .json or .jsonl file.")
 
-dataset_path="input/file/path.jsonl" # MUST UPDATE
-jsonlist = load_dataset_from_file(dataset_path)
-print(f"Values in json: {len(jsonlist)}")
+def save_dataset(data, filename, convert_to_jsonl=False):
+    if convert_to_jsonl:
+        with open(filename, 'w') as file:
+            for obj in data:
+                file.write(json.dumps(obj) + '\n')
+    else:
+        with open(filename, 'w') as file:
+            json.dump(data, file, indent=2)
+            
+def is_ascii(s):
+    return all(ord(c) < 128 for c in s)
 
-# Load the dataset
-updated_dataset = Dataset.from_list(jsonlist)
-print("=schema=")
-print(updated_dataset.features) 
+dir = "/input/file/dir/path" # <Update file directory here>
+dataset_path = os.path.join(dir,"file_name.json") # <Update file name here>
+dataset = load_dataset("json", data_files=dataset_path, num_proc=os.cpu_count())
+print(dataset)
+print(dataset["train"].features)
