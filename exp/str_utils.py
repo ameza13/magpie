@@ -151,6 +151,122 @@ def input_safety_rating(prompt, response):
     '''
     return instruction_format
 
+# Rating a user's query considering the conversation's context
+
+"""
+  "conversations": [
+    {
+      "from": "user",
+      "value": "13 Feb 0"
+    },
+    {
+      "from": "assistant",
+      "value": "It seems like you're just stating a date: February 13th. If you have a question or need assistance with something related to this date, please provide more context or details so I can help you better. For example, you might be looking for historical events that happened on this date, or you might need help with a specific task related to this date."
+    },
+    {
+      "from": "user",
+      "value": "However, if you're simply looking for a way to start a conversation, I can provide some suggestions or answer questions you have about various topics. I'm here to help with information, advice, or entertainment, depending on what you need. Just let me know your interests or what you're looking for, and I'll do my best to assist you."
+    },
+    {
+      "from": "assistant",
+      "value": "February 13th is a date that falls on a Monday in 2023. It is the 44th day of the year, with 321 days remaining until the end of the year. Some historical events that happened on this date include:\n\n* In 1542, Catherine Howard, the fifth wife of Henry VIII of England, was executed for adultery.\n* In 1633, Italian astronomer Galileo Galilei arrived in Rome to face trial before the Inquisition for heresy.\n* In 1668, Portugal and England signed the Treaty of Lisbon, recognizing the independence of Portugal and ending the War of Restoration.\n* In 1861, the Kingdom of Italy was proclaimed, with Victor Emmanuel II as its first king.\n* In 1945, during World War II, the Allies began bombing Dresden, Germany, resulting in a firestorm that killed tens of thousands of civilians.\n* In 1960, France detonated its first atomic bomb in the Sahara Desert.\n* In 1978, the first \"test-tube baby\" was born in England, after being conceived through in vitro fertilization.\n* In 2000, the last original \"Peanuts\" comic strip was published, following the death of its creator, Charles Schulz.\n* In 2012, singer Whitney Houston was found dead in her hotel room in Beverly Hills, California.\n\nIf you have any questions or need more information about any of these events or any other topic, please let me know."
+    }
+  ],
+"""
+def apply_conversation_template(conversations):
+    str_conversations = ""
+    label =""
+    for conversation in conversations:
+        if conversation["from"] == "user":
+            label = "### User:"
+        else:
+            label = "### Assistant:"
+        turn = f'''
+            {label}
+            {conversation["value"]}
+                
+            '''
+        str_conversations += turn
+            
+    return str_conversations
+
+def input_quality_rating_mt(conversations): 
+    str_conversation = apply_conversation_template(conversations)
+     
+    user_message = f''' 
+    
+# Instruction
+
+You will be given a conversation between a User and an AI assistant.
+
+Your evaluation should focus on the *User* questions only. 
+You need to rate the quality of each user question based on its clarity, specificity, and coherence.
+
+The rating scale is as follows:
+- very poor: The query is unclear, vague, or incoherent. It lacks essential information and context.
+- poor: The query is somewhat unclear or lacks important details. It requires significant clarification.
+- average: The query is moderately clear and specific. It may require some additional information for a complete understanding.
+- good: The query is clear, specific, and mostly well-formed. It provides sufficient context for understanding the user\'s intent.
+- excellent: The query is very clear, specific, and well-articulated. It contains all the necessary information and context for providing a comprehensive response.
+
+## Conversation
+```
+{str_conversation}
+```
+
+## Output Format
+Given the conversation, you first need to give an assessment, highlighting the strengths and/or weaknesses of each user question. Then, you need to output an overall rating score for all the questions. 
+
+Please output your response in the format below by filling in the placeholders in [...]:
+
+```
+{{   
+    "explanation": "[...]",
+    "input_quality": "[very poor/poor/average/good/excellent]"
+}}
+```
+Make sure to only output a valid json string.
+Please, do not add any other characters outside the json string.
+
+'''
+    return user_message
+
+
+def sample_quality_rating_mt(conversations): 
+    str_conversation = apply_conversation_template(conversations)
+    user_message = f''' 
+## Instruction 
+
+You will be given a conversation between a User and an AI assistant.
+
+Please rate the assistant's response to each instruction. In particular, when judging, consider:
+
+- Instruction Following: Does the response directly address the question?
+- Accuracy: Is the information provided in the response correct?
+- Presentation: Is the response logically structured and easy to understand?
+
+## Conversation
+```
+{str_conversation}
+```
+You first need to provide an assessment that highlights the strengths and/or weaknesses of each assistant response. Then, please provide an overall score on a scale from 0 to 5 to all the responses provided by the assistant, where a higher score indicates a higher overall quality. 
+
+## Output Format
+Please provide your response in the following format, by filling in the placeholders in [...]:
+
+```
+{{   
+    "score": "[1,2,3,4,5]",
+    "explanation": "[...]"
+}}
+```
+
+Make sure to only output a valid json string.
+Please, do not add any other characters outside the json string.
+'''
+    return user_message
+
+    
 # For statistcal analysis
 MATH_KEYWORDS = [
     "radius", "diameter", "circumference", "perimeter", "triangle", "rectangle",

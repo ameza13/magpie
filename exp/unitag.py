@@ -7,7 +7,7 @@ import torch
 from vllm import LLM, SamplingParams
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSequenceClassification, pipeline
 from utils import load_dataset_from_file, save_dataset
-from str_utils import input_difficulty_rating, input_classification, input_quality_rating, input_safety_rating,sample_quality_rating
+from str_utils import input_difficulty_rating, input_classification, input_quality_rating, input_safety_rating,sample_quality_rating, input_quality_rating_mt, sample_quality_rating_mt
 from lingua import Language, LanguageDetectorBuilder
 import time
 
@@ -59,6 +59,12 @@ checkpoint_every = args.checkpoint_every if args.tag_mission != "reward" else ar
 batch_size = args.batch_size
 mission = args.tag_mission
 
+def template_generator_mt(conversations, mission):
+    if mission == "quality":
+        return input_quality_rating_mt(conversations=conversations)
+    elif mission == "sample_quality":
+        return sample_quality_rating_mt(conversations=conversations)
+    
 def template_generator(input, mission, output=""):
     if mission == "difficulty":
         return input_difficulty_rating(input)
@@ -127,8 +133,19 @@ def set_empty_values(item, mission):
         item['metadata']['label_model'] = None 
     return item
 
+def clean_engine_response(response):
+    if response.startswith("```") and response.endswith("```"):
+        print(f"==Response to be loaded==\n{response[3:-3].strip()}") # TEMP
+        return response[3:-3].strip()
+    if response.startswith("```json") and response.endswith("```"):
+        print(f"==Response to be loaded==\n{response[7:-3].strip()}") # TEMP
+        return response[7:-3].strip()
+    return response
+
 def process_engine_responses(response, item, mission):
     try:
+        # Attempt to clean response
+        response = clean_engine_response(response)
         # Attempt to load response as json 
         tags_json = json.loads(response)    
         if mission == "difficulty":
@@ -151,6 +168,7 @@ def process_engine_responses(response, item, mission):
             item['difficulty'] = [difficulty]
 
             item['metadata']['label_model'] = [MODEL_NAME]
+            
         elif mission == "quality":
             # Check input_quality format
             correct_type = get_item(tags_json['input_quality'], str)
@@ -197,15 +215,21 @@ def process_engine_responses(response, item, mission):
             item['metadata']['label_model'] = [MODEL_NAME]           
     except Exception as e:
         print(f"[unitag.py] Failed to process item with error: {str(e)}")
-        print(f"[unitag.py] Raw response from LLM tagger: {response}")
+        print(f"[unitag.py] Raw response from LLM tagger:\n {response}")
         item = set_empty_values(item, mission)
     return item
 
 # Process a batch of data for: difficulty, quality, and classification missions
 def process_batch(batch, llm, params, mission, tokenizer=None):
+    
     prompts = []
     for i, item in enumerate(batch):
-        chat = [{"role": "user", "content": template_generator(item[INSTRUCTION], mission, item[RESPONSE])}]
+        if len(item["conversations"]) > 2 and mission in ["quality","sample_quality"]: # Multi-turn
+            chat = [{"role": "user", "content": template_generator_mt(conversations=item["conversations"],
+                                                                      mission=mission)}]
+        else: # Single-turn: conversations length = 2
+            chat = [{"role": "user", "content": template_generator(item[INSTRUCTION], mission, item[RESPONSE])}]
+            
         template = llm.llm_engine.tokenizer.tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
         template += "{" # Do we need it?, Yes
         prompts.append(template)
@@ -213,7 +237,7 @@ def process_batch(batch, llm, params, mission, tokenizer=None):
     # TEST
     # print("=TEST=")
     # print(f"Mission: {mission}")
-    # print(f"Prompt Example: {prompts[0]}")
+    # print(f"Prompt Example:\n{prompts[0]}")
 
     outputs = llm.generate(prompts, params)
 
@@ -222,6 +246,9 @@ def process_batch(batch, llm, params, mission, tokenizer=None):
         # Remove additional information at the end of the response
         model_response = model_response[:model_response.rfind("}")+1]
 
+        # print("==Model Response==") # TEST
+        # print(model_response) # TEST
+        
         item = process_engine_responses(model_response, item, mission)
     
     return batch
@@ -342,7 +369,9 @@ def generate_and_update(dataset, mission, llm, params, rm_model, rm_tokenizer, s
         end_idx = min((i + 1) * batch_size + last_checkpoint_idx, len(dataset))
         batch = dataset[start_idx:end_idx]
 
+        print(f'Batch #: {i}/{num_batches}')
         print(f'Batch size: {len(batch)}')
+        
         
         if mission == "reward":
             batch= process_batch_with_reward_model(batch, rm_model, rm_tokenizer)

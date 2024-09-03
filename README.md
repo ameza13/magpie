@@ -40,6 +40,7 @@ Convert input data to a unified schema (similar to ShareGPT schema). You can fin
 #### Generation Models
 - `mistralai/Mistral-7B-Instruct-v0.3`
 - `mistralai/Mixtral-8x22B-Instruct-v0.1`
+- `mistralai/Mistral-Nemo-Instruct-2407`
 
 #### How to run? 
 WIP
