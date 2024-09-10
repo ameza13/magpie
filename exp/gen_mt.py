@@ -11,6 +11,9 @@ from transformers import AutoTokenizer
 from utils import load_dataset_from_file, save_dataset, get_conversation_template
 from vllm import LLM, SamplingParams
 
+INSTRUCTION = "input"
+RESPONSE = "output"
+
 ################
 # Configurations
 ################
@@ -64,7 +67,7 @@ CHECKPOINT_EVERY = args.checkpoint_every
 SAVED_FILE = f"{INPUT_FILE_NAME[:INPUT_FILE_NAME.rfind('.')]}_mt.json"
 
 # Obtain config from configs/model_configs.json
-CONFIG_FILE_PATH = os.path.join(os.environ['HOME'],"/workspace/magpie/configs/model_configs.json")
+CONFIG_FILE_PATH = os.path.join("/u/amezasor/workspace/magpie/configs/model_configs.json")
 with open(CONFIG_FILE_PATH, "r", encoding="utf-8") as f:
     model_configs = json.load(f)
     model_config = model_configs[args.model_path]
@@ -77,7 +80,7 @@ with open(CONFIG_FILE_PATH, "r", encoding="utf-8") as f:
 
 # Process a batch of data using local vllm engine
 def process_batch(batch, llm, instruction_params, response_params, tokenizer=None):
-    # user_instructions = [item['instruction'] for item in batch]
+    # user_instructions = [item[INSTRUCTION] for item in batch]
     for turn in range(2, args.num_turns+1):
         print(f"Processing turn {turn}...")
         # Generate Instructions
@@ -88,33 +91,33 @@ def process_batch(batch, llm, instruction_params, response_params, tokenizer=Non
                 conv = get_conversation_template(MODEL_NAME)
                 conv.system_message = mt_system_prompt
                 if turn == 2:
-                    conv.append_message(conv.roles[0], item[f'instruction'])
-                    conv.append_message(conv.roles[1], item[f'response'])
+                    conv.append_message(conv.roles[0], item[f'{INSTRUCTION}'])
+                    conv.append_message(conv.roles[1], item[f'{RESPONSE}'])
                 else:
-                    conv.append_message(conv.roles[0], item[f'instruction'])
-                    conv.append_message(conv.roles[1], item[f'response'])
+                    conv.append_message(conv.roles[0], item[f'{INSTRUCTION}'])
+                    conv.append_message(conv.roles[1], item[f'{RESPONSE}'])
                     for i in range(2, turn):
-                        conv.append_message(conv.roles[0], item[f'instruction_{i}'])
-                        conv.append_message(conv.roles[1], item[f'response_{i}'])
+                        conv.append_message(conv.roles[0], item[f'{INSTRUCTION}_{i}'])
+                        conv.append_message(conv.roles[1], item[f'{RESPONSE}_{i}'])
                 template = conv.get_prompt() + mt_append_template
             else:
                 chat = []
                 # chat.append({"role": "system", "content": mt_system_prompt})
                 if turn == 2:
-                    chat.append({"role": "user", "content": mt_system_prompt+"\n"+item[f'instruction']})
-                    chat.append({"role": "assistant", "content": item[f'response']})
+                    chat.append({"role": "user", "content": mt_system_prompt+"\n"+item[f'{INSTRUCTION}']})
+                    chat.append({"role": "assistant", "content": item[f'{RESPONSE}']})
                 else:
-                    chat.append({"role": "user", "content": item[f'instruction']})
-                    chat.append({"role": "assistant", "content": item[f'response']})
+                    chat.append({"role": "user", "content": item[f'{INSTRUCTION}']})
+                    chat.append({"role": "assistant", "content": item[f'{RESPONSE}']})
                     for i in range(2, turn):
-                        chat.append({"role": "user", "content": item[f'instruction_{i}']})
-                        chat.append({"role": "assistant", "content": item[f'response_{i}']})
+                        chat.append({"role": "user", "content": item[f'{INSTRUCTION}_{i}']})
+                        chat.append({"role": "assistant", "content": item[f'{RESPONSE}_{i}']})
                 template = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=False) + mt_append_template
             prompts.append(template)
 
         outputs = llm.generate(prompts, instruction_params)
         for i, item in enumerate(batch):
-            item[f'instruction_{turn}'] = outputs[i].outputs[0].text.strip()
+            item[f'{INSTRUCTION}_{turn}'] = outputs[i].outputs[0].text.strip()
 
         # print(f"OUTPUT INST: {outputs[0].outputs[0].text.strip()}") # TEST 
         # Generate Responses
@@ -124,35 +127,35 @@ def process_batch(batch, llm, instruction_params, response_params, tokenizer=Non
             if not args.tokenizer_template:
                 conv = get_conversation_template(MODEL_NAME)
                 if turn == 2:
-                    conv.append_message(conv.roles[0], item[f'instruction'])
-                    conv.append_message(conv.roles[1], item[f'response'])
+                    conv.append_message(conv.roles[0], item[f'{INSTRUCTION}'])
+                    conv.append_message(conv.roles[1], item[f'{RESPONSE}'])
                 else:
-                    conv.append_message(conv.roles[0], item[f'instruction'])
-                    conv.append_message(conv.roles[1], item[f'response'])
+                    conv.append_message(conv.roles[0], item[f'{INSTRUCTION}'])
+                    conv.append_message(conv.roles[1], item[f'{RESPONSE}'])
                     for i in range(2, turn):
-                        conv.append_message(conv.roles[0], item[f'instruction_{i}'])
-                        conv.append_message(conv.roles[1], item[f'response_{i}'])
-                conv.append_message(conv.roles[0], item[f'instruction_{turn}'])
+                        conv.append_message(conv.roles[0], item[f'{INSTRUCTION}_{i}'])
+                        conv.append_message(conv.roles[1], item[f'{RESPONSE}_{i}'])
+                conv.append_message(conv.roles[0], item[f'{INSTRUCTION}_{turn}'])
                 conv.append_message(conv.roles[1], None)
                 template = conv.get_prompt() 
             else:
                 chat = []
                 if turn == 2:
-                    chat.append({"role": "user", "content": item[f'instruction']})
-                    chat.append({"role": "assistant", "content": item[f'response']})
+                    chat.append({"role": "user", "content": item[f'{INSTRUCTION}']})
+                    chat.append({"role": "assistant", "content": item[f'{RESPONSE}']})
                 else:
-                    chat.append({"role": "user", "content": item[f'instruction']})
-                    chat.append({"role": "assistant", "content": item[f'response']})
+                    chat.append({"role": "user", "content": item[f'{INSTRUCTION}']})
+                    chat.append({"role": "assistant", "content": item[f'{RESPONSE}']})
                     for i in range(2, turn):
-                        chat.append({"role": "user", "content": item[f'instruction_{i}']})
-                        chat.append({"role": "assistant", "content": item[f'response_{i}']})
-                chat.append({"role": "user", "content": item[f'instruction_{turn}']})
+                        chat.append({"role": "user", "content": item[f'{INSTRUCTION}_{i}']})
+                        chat.append({"role": "assistant", "content": item[f'{RESPONSE}_{i}']})
+                chat.append({"role": "user", "content": item[f'{INSTRUCTION}_{turn}']})
                 template = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
             prompts.append(template)
 
         outputs = llm.generate(prompts, response_params)
         for i, item in enumerate(batch):
-            item[f'response_{turn}'] = outputs[i].outputs[0].text.strip()
+            item[f'{RESPONSE}_{turn}'] = outputs[i].outputs[0].text.strip()
 
         # print(f"OUTPUT RESP: {outputs[0].outputs[0].text.strip()}") # TEST 
 

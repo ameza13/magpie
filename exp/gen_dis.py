@@ -38,7 +38,13 @@ sentence_model = args.sentence_model
 dataset_path = args.input_file
 output_dir = args.output_dir
 dataset_name = dataset_path[dataset_path.rfind('/')+1:dataset_path.rfind('.')]
-output_file = f"{dataset_name[:dataset_name.rfind('.')]}_distance.jsonl"
+output_file = f"{dataset_name}_distance.jsonl"
+
+print("= File paths =")
+print(f"dataset_path: {dataset_path}")
+print(f"output_dir: {output_dir}")
+print(f"dataset_name: {dataset_name}")
+print(f"output_file: {output_file}")
 
 ################
 # Step 1 - Load the Dataset and Build the Faiss Index
@@ -48,7 +54,17 @@ dataset = load_dataset("json", data_files=dataset_path)
 print(dataset)
 print(dataset["train"].features)
 
-inputs = dataset["train"]["input"]
+# For multi-turn data we use all the inputs
+# .remove_columns(['min_neighbor_distance', 'repeat_count', 'min_similar_uuid']) \
+dataset = dataset \
+    .map(lambda x: {
+                    "inputs": ("\n\n".join(message["value"] for message in x["conversations"] if message["from"] == "user")).strip()
+                    }) 
+print(dataset["train"].features)
+
+# inputs = dataset["train"]["input"]
+inputs = dataset["train"]["inputs"] 
+
 print(f"The second instruction in the dataset is: {inputs[1]}")
 
 model = SentenceTransformer(sentence_model)
