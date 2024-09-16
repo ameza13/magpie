@@ -176,17 +176,22 @@ def input_safety_rating(prompt, response):
 def apply_conversation_template(conversations):
     str_conversations = ""
     label =""
+    turn_user = 1
+    turn_resp = 1
     for conversation in conversations:
         if conversation["from"] == "user":
-            label = "### User:"
+            label = f"### User Question: {str(turn_user)}"
+            turn_user += 1
         else:
-            label = "### Assistant:"
-        turn = f'''
+            label = f"### Assistant Response: {str(turn_resp)}"
+            turn_resp += 1
+        text = f'''
             {label}
             {conversation["value"]}
                 
             '''
-        str_conversations += turn
+        str_conversations += text
+       
             
     return str_conversations
 
@@ -266,6 +271,40 @@ Please, do not add any other characters outside the json string.
 '''
     return user_message
 
+def conversations_quality_rating_mt(conversations): 
+    str_conversation = apply_conversation_template(conversations)
+    user_message = f''' 
+## Instruction 
+
+You will be given a conversation between a User and an AI assistant.
+
+Please rate the quality of the whole conversation. In particular, when judging, consider:
+
+- Question Clarity: Does the user formulate only one, clear, specific, and coherent question? 
+- Question Presentation: Is the question logically structured, easy to understand, and in a natural language format?
+- Response Relevance: Does the response directly address the question?
+- Response Accuracy: Is the information provided in the response correct?
+- Response Presentation: Is the response logically structured and easy to understand?
+```
+{str_conversation}
+```
+You first need to provide a comprehensive assessment that highlights the strengths and/or weaknesses of all the user questions and their respective responses. Then, please provide an overall score on a scale from 0 to 5 to the whole conversation, where a higher score indicates a higher overall quality. 
+
+## Output Format
+After providing your explanation, output your 
+overall score in the following format by strictly filling in the placeholders in [...]:
+
+```
+{{
+    "score": "[1,2,3,4,5]",
+    "explanation": "[...]"
+}}
+```
+
+Make sure to output *ONLY ONE*  valid json string.
+Please, *DO NOT ADD* any other characters outside the json string.
+'''
+    return user_message
     
 # For statistcal analysis
 MATH_KEYWORDS = [

@@ -7,7 +7,7 @@ import torch
 from vllm import LLM, SamplingParams
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSequenceClassification, pipeline
 from utils import load_dataset_from_file, save_dataset
-from str_utils import input_difficulty_rating, input_classification, input_quality_rating, input_safety_rating,sample_quality_rating, input_quality_rating_mt, sample_quality_rating_mt
+from str_utils import input_difficulty_rating, input_classification, input_quality_rating, input_safety_rating,sample_quality_rating, input_quality_rating_mt, sample_quality_rating_mt, conversations_quality_rating_mt
 from lingua import Language, LanguageDetectorBuilder
 import time
 
@@ -17,7 +17,7 @@ import time
 def get_args():
     # Experiment Settings
     parser = argparse.ArgumentParser(description="Unified Tagging Manager.")
-    parser.add_argument("--tag_mission", type=str, default="quality", help="The tagging mission.", choices=["difficulty", "quality", "classification", "safety", "reward", "language", "sample_quality"])
+    parser.add_argument("--tag_mission", type=str, default="quality", help="The tagging mission.", choices=["difficulty", "quality", "classification", "safety", "reward", "language", "sample_quality","conversation_quality"])
     parser.add_argument("--model_path", type=str, default="mistralai/Mistral-7B-Instruct-v0.3", help="Tag Model.")
     parser.add_argument("--guard_model_path", type=str, default="allenai/wildguard", help="Guard Model.")
     parser.add_argument("--reward_model_path", type=str, default="sfairXC/FsfairX-LLaMA3-RM-v0.1", help="Reward Model.")
@@ -46,6 +46,7 @@ def get_args():
     parser.add_argument("--max_tokens", type=int, default=1024)
     parser.add_argument("--temperature", type=float, default=0)
     parser.add_argument("--repetition_penalty", type=float, default=1.0)
+    parser.add_argument("--top_p", type=float, default=1.0)
 
     return parser.parse_args()
 
@@ -64,6 +65,10 @@ def template_generator_mt(conversations, mission):
         return input_quality_rating_mt(conversations=conversations)
     elif mission == "sample_quality":
         return sample_quality_rating_mt(conversations=conversations)
+    elif mission == "conversation_quality":
+        return conversations_quality_rating_mt(conversations=conversations)
+    else:
+        raise ValueError("Invalid mission. Available missions: quality, sample_quality, conversation_quality")
     
 def template_generator(input, mission, output=""):
     if mission == "difficulty":
@@ -131,14 +136,22 @@ def set_empty_values(item, mission):
         item['judge_quality_score'] = None
         item['judge_quality_explanation'] = None
         item['metadata']['label_model'] = None 
+    elif mission == "conversation_quality":
+        item['conversation_score'] = None
+        item['conversation_explanation'] = None
+        item['metadata']['label_model'] = None 
     return item
 
 def clean_engine_response(response):
+    # occurrences = [i for i in range(len(response)) if response.startswith("```", i)] 
+    # if len(occurrences) == 2: # There are 2 ```
+    #     pass # Remove text outside ``` ``` (if any)
+    
     if response.startswith("```") and response.endswith("```"):
-        print(f"==Response to be loaded==\n{response[3:-3].strip()}") # TEMP
+        # print(f"==Response to be loaded==\n{response[3:-3].strip()}") # TEMP
         return response[3:-3].strip()
     if response.startswith("```json") and response.endswith("```"):
-        print(f"==Response to be loaded==\n{response[7:-3].strip()}") # TEMP
+        # print(f"==Response to be loaded==\n{response[7:-3].strip()}") # TEMP
         return response[7:-3].strip()
     return response
 
@@ -212,7 +225,23 @@ def process_engine_responses(response, item, mission):
             item['judge_quality_score'] = [sample_quality_score]
             item['judge_quality_explanation'] = [sample_quality_explanation]
 
-            item['metadata']['label_model'] = [MODEL_NAME]           
+            item['metadata']['label_model'] = [MODEL_NAME]      
+        elif mission == "conversation_quality":
+            # Check input_quality format
+            correct_type = get_item(tags_json['score'], str)
+            if not correct_type:
+                item = set_empty_values(item, mission)
+                return item
+            
+            conversation_quality_score = {}
+            conversation_quality_score[f'{MODEL_NAME}'] = tags_json['score']
+            conversation_quality_explanation = {}
+            conversation_quality_explanation[f'{MODEL_NAME}'] = tags_json['explanation'] # Does it crash because of breaklines?
+
+            item['conversation_score'] = [conversation_quality_score]
+            item['conversation_explanation'] = [conversation_quality_explanation]
+
+            item['metadata']['label_model'] = [MODEL_NAME]     
     except Exception as e:
         print(f"[unitag.py] Failed to process item with error: {str(e)}")
         print(f"[unitag.py] Raw response from LLM tagger:\n {response}")
@@ -224,20 +253,21 @@ def process_batch(batch, llm, params, mission, tokenizer=None):
     
     prompts = []
     for i, item in enumerate(batch):
-        if len(item["conversations"]) > 2 and mission in ["quality","sample_quality"]: # Multi-turn
+        if len(item["conversations"]) > 2 and mission in ["quality","sample_quality", "conversation_quality"]: # Multi-turn
             chat = [{"role": "user", "content": template_generator_mt(conversations=item["conversations"],
                                                                       mission=mission)}]
         else: # Single-turn: conversations length = 2
             chat = [{"role": "user", "content": template_generator(item[INSTRUCTION], mission, item[RESPONSE])}]
-            
+            # chat = [{"role": "user", "content": template_generator(item[INSTRUCTION], mission)}] # Instruction only
+
         template = llm.llm_engine.tokenizer.tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
         template += "{" # Do we need it?, Yes
         prompts.append(template)
 
     # TEST
-    # print("=TEST=")
-    # print(f"Mission: {mission}")
-    # print(f"Prompt Example:\n{prompts[0]}")
+    print("=TEST=")
+    print(f"Mission: {mission}")
+    print(f"Prompt Example:\n{prompts[0]}")
 
     outputs = llm.generate(prompts, params)
 
@@ -420,8 +450,11 @@ if __name__ == "__main__":
     elif mission == "sample_quality":
         output_file = f"{input_file[:input_file.rfind('.')]}_sample-quality.jsonl"
         checkpoint_file = f"{input_file[:input_file.rfind('.')]}_sample-quality_checkpoint.json"
+    elif mission == "conversation_quality":
+        output_file = f"{input_file[:input_file.rfind('.')]}_conversation-quality.jsonl"
+        checkpoint_file = f"{input_file[:input_file.rfind('.')]}__conversation-quality_checkpoint.json"
     else:
-        raise ValueError("Invalid mission. Available missions: difficulty, quality, classification, safety, reward, language")
+        raise ValueError("Invalid mission. Available missions: difficulty, quality, classification, safety, reward, language, sample_quality, conversation_quality")
     # Change jsonl to json if args.save_as is json
     if args.save_as == "json":
         output_file = f"{output_file[:output_file.rfind('.')]}.json"
@@ -480,6 +513,7 @@ if __name__ == "__main__":
             
             params = SamplingParams(
                         temperature=args.temperature,
+                        top_p=args.top_p,
                         max_tokens=args.max_tokens,
                         repetition_penalty=args.repetition_penalty,
                         stop=["}"], # Dow we need this one?
