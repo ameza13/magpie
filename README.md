@@ -53,7 +53,7 @@ chmod +x ./scripts/blue-vela/magpie-mistral7b.sh
 For instruction generate play with temperature and top_p values, for responses you use greedy. The magpie paper uses 12 different combinations of these values to create MagPie Air (check Table 6 in their paper).
 
 ## Data processing
-We modified magpie scripts to annotate multiple datasets (not only those created with magpie framewor). In order to use the annotation scripts, please convert your data to this [unified schema](/data/input_schema_example.json).
+We modified magpie scripts to annotate multiple datasets (not only those created with magpie framework). In order to use the annotation scripts, please convert your data to this [unified schema](https://github.com/ameza13/magpie/blob/main/data/input_schema_example.jsonl).
 
 ## Data Tagging 
 
@@ -65,7 +65,7 @@ We modified magpie scripts to annotate multiple datasets (not only those created
 #### How to run?
 By default, the script runs all the tagging missions: difficulty, quality, classification, conversation_quality. 
 
-Annotations with a reward and safety models are still WIP.
+Annotations with reward and safety models are still a WIP.
 
 ```
 cd /magpie/
