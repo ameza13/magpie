@@ -177,26 +177,52 @@ fi
 # fi
 
 # TO DO: Define what reward model we should use
-if [ $tag_mission == "reward" ] || [ $tag_mission == "all" ]; then
-    echo "[magpie.sh] Start Generating Reward Tags..."
-    python ${WORKSPACE}/magpie/exp/unitag.py \
-        --device $device \
-        --reward_model_path $reward_model_path \
-        --input_file $input_file \
-        --tag_mission "reward" \
-        --tensor_parallel $tensor_parallel \
-        --batch_size 1 \
+# if [ $tag_mission == "reward" ] || [ $tag_mission == "all" ]; then
+#     echo "[magpie.sh] Start Generating Reward Tags..."
+#     python ${WORKSPACE}/magpie/exp/unitag.py \
+#         --device $device \
+#         --reward_model_path $reward_model_path \
+#         --input_file $input_file \
+#         --tag_mission "reward" \
+#         --tensor_parallel $tensor_parallel \
+#         --batch_size 1 \
 
-    echo "[magpie.sh] Finish Generating Reward Tags!"
+#     echo "[magpie.sh] Finish Generating Reward Tags!"
+
+#     # Change input file name to quality tagged file
+#     input_file_name=$(basename $input_file)
+#     input_file_dir=$(dirname $input_file)
+#     input_file_name_no_ext="${input_file_name%.*}"
+#     input_file_ext="${input_file_name##*.}"
+#     reward_tag_file="${input_file_dir}/${input_file_name_no_ext}_reward.${input_file_ext}"
+#     input_file=$reward_tag_file
+#     echo "[magpie.sh] Reward Tagged File: $input_file"
+# fi
+
+if [ $tag_mission == "conversation_quality" ] || [ $tag_mission == "all" ]; then
+    echo "[magpie.sh] Start Generating Quality Tags..."
+    CUDA_VISIBLE_DEVICES=$device python ${WORKSPACE}/magpie/exp/unitag.py \
+        --device $device \
+        --model_path $model_path \
+        --input_file $input_file \
+        --tag_mission "conversation_quality" \
+        --tensor_parallel $tensor_parallel \
+        --gpu_memory_utilization $gpu_memory_utilization \
+        --batch_size $batch_size \
+        --output_dir $output_dir \
+        --max_tokens $max_tokens \
+        --max_model_len $max_model_len
+
+    echo "[magpie.sh] Finish Generating Quality Tags!"
 
     # Change input file name to quality tagged file
     input_file_name=$(basename $input_file)
     input_file_dir=$(dirname $input_file)
     input_file_name_no_ext="${input_file_name%.*}"
     input_file_ext="${input_file_name##*.}"
-    reward_tag_file="${input_file_dir}/${input_file_name_no_ext}_reward.${input_file_ext}"
-    input_file=$reward_tag_file
-    echo "[magpie.sh] Reward Tagged File: $input_file"
+    quality_tag_file="${input_file_dir}/${input_file_name_no_ext}_conversation_quality.${input_file_ext}"
+    input_file=$quality_tag_file
+    echo "[magpie.sh] Quality Tagged File: $input_file"
 fi
 
 echo "[magpie.sh] Finish Tagging Mission: $tag_mission"
