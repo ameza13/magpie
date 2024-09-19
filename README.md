@@ -9,7 +9,7 @@ You can check the original project README -> [here](/README_ORIGINAL.md)
 
 #### Set Environment variables
 ```
-export DATA_MGT="/path/to/data/dir" # These is the directory to save input, temporal checkpoints, and final output files.
+export DATA_MGT="/path/to/data/dir" # Directory to save input, temporal checkpoints, and final output files.
 export WORKSPACE="/path/to/parent/directory/of/this/repo" 
 export HF_HOME="/path/to/HF_HOME/dir"
 export HF_HUB_CACHE="/path/to/HF_HUB_CACHE/dir"
