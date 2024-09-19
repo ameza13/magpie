@@ -50,7 +50,7 @@ chmod +x ./scripts/blue-vela/magpie-mistral7b.sh
 ./scripts/blue-vela/magpie-mistral7b.sh
 ```
 #### Configurations
-For instruction generate play with temperature and top_p values, for responses you use greedy. The magpie paper uses 12 different combinations of these values to create MagPie Air (check Table 6 in their paper).
+For instruction generation play with temperature and top_p values, for responses use greedy. The magpie paper reports the use of 12 different combinations of values to generate MagPie Air instructions (Table 6 in MagPie paper).
 
 ## Data processing
 We modified magpie scripts to annotate multiple datasets (not only those created with magpie framework). In order to use the annotation scripts, please convert your data to this [unified schema](https://github.com/ameza13/magpie/blob/main/data/input_schema_example.jsonl).
